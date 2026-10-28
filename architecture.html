@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file: data:; style-src 'self' file:; script-src 'self' file: data: 'unsafe-inline'; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"><title>Planet Atlas · Architecture</title><link rel="stylesheet" href="assets/public.css"><link rel="stylesheet" href="assets/architecture.css"></head><body><header><a class="brand" href="index.html">PLANET ATLAS</a><nav aria-label="Main navigation"><a href="index.html#browse-world">Browse</a><a href="index.html#geology">Geology</a><a href="index.html#lessons">Lessons</a><a href="index.html#drift">Keeping direction</a><a href="atlas.html">Explore ↗</a><a href="architecture.html">Architecture</a></nav></header><main class="arch"><p class="eyebrow">Architecture</p><h1>The world lives in Rust.<br>Engines are windows onto it.</h1>
+<p class="lede">All of the heavy lifting (plates, climate, erosion, rock history, materials, fracture and the accounting of every gram moved)
+runs in a Rust engine with no dependency on any game engine. A small world server sits in front of it. Unreal is the first full client,
+and a browser bench and this atlas are others. Any engine that can make a local network request and draw a mesh could be the next.</p>
+
+<div class="flow" aria-label="Architecture diagram">
+ <div class="tier"><b>1 · Rust world engine</b>Plate motion and crust, climate and weather, rivers and erosion, rock layers and their formation history,
+ minerals and trace metals, rock strength, fracture and blast physics, and finite volumes of material.<br><span>Runs headless: the same code drives command-line runs, tests and the server.</span></div>
+ <div class="arrow">↓</div>
+ <div class="tier"><b>2 · World server</b>Publishes saved, content-identified world products; cuts terrain windows on demand wherever a player goes; accepts action requests
+ (blast here with this energy, mine this spot) and returns small change records.<br><span>A local HTTP service; one action's change record is a few kilobytes.</span></div>
+ <div class="arrow">↓</div>
+ <div class="clients">
+  <div class="tier"><b>Unreal (today)</b>Streams terrain around the player, renders rock looks, collides, aims, shows rubble, inventory and origin stories.</div>
+  <div class="tier"><b>Browser (today)</b>A geology bench and this atlas: inspect layers, sections, accounts and history from the same products.</div>
+  <div class="tier"><b>Any engine (possible)</b>Godot, Unity, a custom renderer or a server-side bot: fetch windows, draw them, send actions.</div>
+ </div>
+ <div class="canon"><b>Changing the world</b> · A client never edits the world directly. It sends an intent; the engine turns it into a candidate change;
+ an independent check confirms the physics and the material accounting; only then is the change accepted into the shared record and published
+ back to every client. Renderer state is never the truth.</div>
+</div>
+
+<h2>Coarse to fine, built when needed, with a history</h2>
+<p>The world is not one giant mesh. Each level is generated from the level above it, only where something needs it, and every result records where it came from.</p>
+<table><tr><th>Level</th><th>Grid</th><th>What it decides</th></tr>
+<tr><td>Planet</td><td>576 × 288 cells (about 70 km), 2 My steps over 400 My</td><td>Plates, crust, mountains, climate, drainage, volcanism, rock columns and their formation history</td></tr>
+<tr><td>Regional skeleton</td><td>about 16 km control spacing</td><td>Where rivers and junctions run, consistent with the planet's drainage</td></tr>
+<tr><td>Regional relief</td><td>32 m posts in windows of about 20 km</td><td>Valleys, river beds, hillslopes and rock bands, solved from the cells above</td></tr>
+<tr><td>Near ground</td><td>8 m ring, then 2 m rock posts beside the player</td><td>Cliff faces, ledges, talus, soil, snow and vegetation</td></tr>
+<tr><td>Touched rock</td><td>finite volumes where a blast or mine stroke lands</td><td>Exactly which minerals and elements move, and where to</td></tr></table>
+<ul><li><b>Generated on demand.</b> The server cuts the window a traveller needs when they arrive; a rock body is admitted into the accounting the first time something touches it. A short warm-up can prepare places ahead of time.</li>
+<li><b>Repeatable.</b> Random choices are keyed to place, so the same cell gives the same answer however and whenever it is generated.</li>
+<li><b>Provenance at every level.</b> Each window names its recipe and the exact inputs above it, and each surface point carries the id of the rock layer it exposes, back to the planet cell and the event that formed it. Pick up a lump of mined rock and the record says which body it came from, which layer, the formation event, the blast that broke it and the stroke that collected it.</li></ul>
+
+<h2>Why the split</h2>
+<table><tr><th>Concern</th><th>Lives in</th><th>Why</th></tr>
+<tr><td>Geology, climate, physics, accounting</td><td>Rust engine</td><td>Deterministic, fast, testable without a renderer; one source of truth.</td></tr>
+<tr><td>Where you are and what you can see</td><td>World server</td><td>Builds terrain around the traveller on request instead of shipping a fixed map.</td></tr>
+<tr><td>Pixels, input, sound, collision</td><td>Engine client</td><td>Each engine does what it is good at; swapping engines does not change the world.</td></tr>
+<tr><td>Accepted changes</td><td>Shared record</td><td>Every blast or mined lot is traceable to its source rock and history.</td></tr></table>
+
+<h2>How Unreal is connected</h2>
+<p>A thin Unreal plugin talks to the local world server. As the player moves it asks for terrain windows around them and builds meshes and materials from them.
+Pressing a key to blast or mine sends an action; the server resolves it against the rock that is actually there, the change is checked and accepted,
+and Unreal receives the new surface, the rubble and the inventory lots. Clicking a lot shows where its minerals came from, read from the same record.
+Measured on one workstation in one run: a mine stroke about a second, a 1 GJ blast about 1.3 s and a 1 TJ blast about 8.5 s from click to result.</p>
+
+<h2>What another engine would need</h2>
+<ul><li>Ask for terrain windows around a position and turn heights and material fields into a mesh.</li>
+<li>Send actions (blast, mine) as requests and apply the returned change records.</li>
+<li>Present materials, rubble and inventory however it likes; the numbers come from the server.</li></ul>
+
+<h2>Lessons from using Unreal this way</h2>
+<ul><li><b>Keep the truth outside the engine.</b> When the world record lives in the server, Unreal can crash, restart or be replaced and the world comes back exactly; a blasted world restored byte for byte from the server alone.</li>
+<li><b>Iterate the science outside Unreal.</b> Cook and package cycles are slow. A light browser bench and headless Rust runs answer physics questions in seconds; Unreal is for checking how it looks and plays.</li>
+<li><b>Stream, do not bake one map per place.</b> Packaged per-location maps made good screenshots and a workflow dead end. Building terrain around the traveller on request scales to a whole planet.</li>
+<li><b>Make Unreal testable without a person.</b> Offscreen runs with scripted movement and actions, saving stills that a reviewer (human or model) actually looks at, turned "it should work" into evidence.</li>
+<li><b>Keep the wire small.</b> Re-reading a 33 MB status file per action made each mine stroke take 4 to 40 seconds; a few-kilobyte change record brought it to about a second.</li>
+<li><b>Equal, not close.</b> A published surface 15 cm off the true one made aim rays miss the rock. What the engine draws must match the record exactly.</li>
+<li><b>Measure frame time with A/B switches.</b> Adding a dense forest tripled frame time; switching features off one at a time showed which ones paid for it.</li>
+<li><b>Treat the GPU as a shared, fragile resource.</b> One Unreal job at a time behind a lock, memory caps on heavy jobs, an explicit GPU choice on multi-GPU machines, and a pause when driver errors repeat.</li></ul>
+
+<h2>Why this matters beyond one project</h2>
+<p><b>Agentic coding can run overnight.</b> Long engineering tasks were handed to headless coding agents that worked through the night, while a lead agent reviewed each
+finished piece, ran the checks and merged only what passed. The human set the goal and the rules and reviewed results in the morning. Written rules, a decision ledger
+and mechanical merge gates are what kept that unattended work on course.</p>
+<p><b>Simulation and science are now within reach.</b> Plate kinematics, energy-balance climate, river incision, crater scaling and exact mineral accounting from cited
+empirical relations used to need specialist teams. The recent wave of frontier models can read the literature, choose a defensible approximation, implement it and say
+what it does not cover.</p>
+<p><b>Models are starting to understand game engines.</b> They write engine plugins and build scripts, drive offscreen captures, read the screenshots and find
+problems such as seams, wrong materials or missed collisions. Not perfect, and still in need of human direction, but a real change in what a small team can attempt.</p>
+
+<h2>Honest limits</h2>
+<ul><li>Only Unreal and the browser are built and tested today; other engines are an architectural possibility, not a shipped integration.</li>
+<li>Plate motion is a prescribed plate model, not a solved mantle flow.</li>
+<li>Whole-planet terrain coverage is still being completed; today's playable terrain streams from part of the planet.</li></ul>
+<p><a href="index.html">← Back to the atlas home</a></p></main></body></html>

@@ -1,0 +1,8 @@
+.arch{max-width:1100px;margin:0 auto;padding:56px 5vw 80px}.arch h1{font-size:clamp(38px,5vw,64px);line-height:1.05;margin:12px 0 18px}
+.arch .lede{max-width:820px;font-size:19px;line-height:1.6}.arch h2{margin:54px 0 14px;font-size:28px}.arch p,.arch li{line-height:1.7;max-width:860px}
+.flow{display:grid;grid-template-columns:1fr;gap:10px;margin:30px 0}.tier{border:1px solid #2b424c;background:#102630;padding:18px 22px}
+.tier b{display:block;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#e2b781;margin-bottom:6px}.tier span{color:#a1b6bd}
+.clients{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.arrow{text-align:center;color:#e2b781;font-size:20px;line-height:1}
+.canon{border:1px dashed #e2b781;padding:16px 22px;margin-top:14px}.arch table{border-collapse:collapse;width:100%;margin:18px 0;font-size:15px}
+.arch td,.arch th{border-bottom:1px solid #2b424c;padding:10px 8px;text-align:left;vertical-align:top}.arch th{color:#e2b781;font-weight:600}
+@media(max-width:760px){.clients{grid-template-columns:1fr}}
